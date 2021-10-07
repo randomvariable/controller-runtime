@@ -28,9 +28,10 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
-	"sync"
 	"syscall"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 )
 
 // ListenAddr represents some listening address and port.
@@ -91,7 +92,7 @@ type State struct {
 	// waitDone is closed when our call to wait finishes up, and indicates that
 	// our process has terminated.
 	waitDone chan struct{}
-	errMu    sync.Mutex
+	errMu    syncutil.Mutex
 	exitErr  error
 	exited   bool
 }

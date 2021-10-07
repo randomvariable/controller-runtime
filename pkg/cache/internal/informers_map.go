@@ -20,8 +20,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"sync"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -111,7 +112,7 @@ type specificInformersMap struct {
 	resync time.Duration
 
 	// mu guards access to the map
-	mu sync.RWMutex
+	mu syncutil.RWMutex
 
 	// start is true if the informers have been started
 	started bool
@@ -413,7 +414,7 @@ type gvkFixupWatcher struct {
 	watcher watch.Interface
 	ch      chan watch.Event
 	gvk     schema.GroupVersionKind
-	wg      sync.WaitGroup
+	wg      syncutil.WaitGroup
 }
 
 func newGVKFixupWatcher(gvk schema.GroupVersionKind, watcher watch.Interface) watch.Interface {

@@ -19,7 +19,8 @@ package certwatcher
 import (
 	"context"
 	"crypto/tls"
-	"sync"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"github.com/fsnotify/fsnotify"
 	logf "sigs.k8s.io/controller-runtime/pkg/internal/log"
@@ -31,7 +32,7 @@ var log = logf.RuntimeLog.WithName("certwatcher")
 // changes, it reads and parses both and calls an optional callback with the new
 // certificate.
 type CertWatcher struct {
-	sync.RWMutex
+	syncutil.RWMutex
 
 	currentCert *tls.Certificate
 	watcher     *fsnotify.Watcher

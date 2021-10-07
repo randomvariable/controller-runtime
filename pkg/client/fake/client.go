@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -37,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/testing"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -52,7 +52,7 @@ type fakeClient struct {
 	tracker         versionedTracker
 	scheme          *runtime.Scheme
 	restMapper      meta.RESTMapper
-	schemeWriteLock sync.Mutex
+	schemeWriteLock syncutil.Mutex
 }
 
 var _ client.WithWatch = &fakeClient{}

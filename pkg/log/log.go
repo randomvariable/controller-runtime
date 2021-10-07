@@ -35,8 +35,9 @@ package log
 
 import (
 	"context"
-	"sync"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"github.com/go-logr/logr"
 )
@@ -70,7 +71,7 @@ func init() {
 }
 
 var (
-	loggerWasSetLock sync.Mutex
+	loggerWasSetLock syncutil.Mutex
 	loggerWasSet     bool
 )
 

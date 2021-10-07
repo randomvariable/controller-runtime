@@ -20,8 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -846,7 +847,7 @@ var _ = Describe("controller", func() {
 
 type DelegatingQueue struct {
 	workqueue.RateLimitingInterface
-	mu sync.Mutex
+	mu syncutil.Mutex
 
 	countAddRateLimited int
 	countAdd            int

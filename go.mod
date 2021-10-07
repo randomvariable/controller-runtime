@@ -12,6 +12,7 @@ require (
 	github.com/onsi/gomega v1.15.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
+	github.com/sasha-s/go-deadlock v0.3.1
 	go.uber.org/goleak v1.1.10
 	go.uber.org/zap v1.19.0
 	golang.org/x/sys v0.0.0-20210817190340-bfb29a6856f2

@@ -22,7 +22,8 @@ package apiutil
 import (
 	"fmt"
 	"reflect"
-	"sync"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +38,7 @@ import (
 
 var (
 	protobufScheme     = runtime.NewScheme()
-	protobufSchemeLock sync.RWMutex
+	protobufSchemeLock syncutil.RWMutex
 )
 
 func init() {

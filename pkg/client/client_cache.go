@@ -18,7 +18,8 @@ package client
 
 import (
 	"strings"
-	"sync"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,7 +49,7 @@ type clientCache struct {
 	structuredResourceByType map[schema.GroupVersionKind]*resourceMeta
 	// unstructuredResourceByType caches unstructured type metadata
 	unstructuredResourceByType map[schema.GroupVersionKind]*resourceMeta
-	mu                         sync.RWMutex
+	mu                         syncutil.RWMutex
 }
 
 // newResource maps obj to a Kubernetes Resource and constructs a client for that Resource.

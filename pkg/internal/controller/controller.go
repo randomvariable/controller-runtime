@@ -20,8 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"github.com/go-logr/logr"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -64,7 +65,7 @@ type Controller struct {
 	SetFields func(i interface{}) error
 
 	// mu is used to synchronize Controller setup
-	mu sync.Mutex
+	mu syncutil.Mutex
 
 	// Started is true if the Controller has been Started
 	Started bool
@@ -164,7 +165,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		c.Queue.ShutDown()
 	}()
 
-	wg := &sync.WaitGroup{}
+	wg := &syncutil.WaitGroup{}
 	err := func() error {
 		defer c.mu.Unlock()
 

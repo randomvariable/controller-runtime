@@ -18,7 +18,6 @@ package apiutil
 
 import (
 	"errors"
-	"sync"
 
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -26,19 +25,20 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 )
 
 // dynamicRESTMapper is a RESTMapper that dynamically discovers resource
 // types at runtime.
 type dynamicRESTMapper struct {
-	mu           sync.RWMutex // protects the following fields
+	mu           syncutil.RWMutex // protects the following fields
 	staticMapper meta.RESTMapper
 	limiter      *rate.Limiter
 	newMapper    func() (meta.RESTMapper, error)
 
 	lazy bool
 	// Used for lazy init.
-	initOnce sync.Once
+	initOnce syncutil.Once
 }
 
 // DynamicRESTMapperOption is a functional option on the dynamicRESTMapper.

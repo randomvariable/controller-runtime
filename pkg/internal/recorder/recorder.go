@@ -19,7 +19,6 @@ package recorder
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +26,7 @@ import (
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 )
 
 // EventBroadcasterProducer makes an event broadcaster, returning
@@ -37,7 +37,7 @@ type EventBroadcasterProducer func() (caster record.EventBroadcaster, stopWithPr
 // Provider is a recorder.Provider that records events to the k8s API server
 // and to a logr Logger.
 type Provider struct {
-	lock    sync.RWMutex
+	lock    syncutil.RWMutex
 	stopped bool
 
 	// scheme to specify when creating a recorder
@@ -47,7 +47,7 @@ type Provider struct {
 	evtClient       corev1client.EventInterface
 	makeBroadcaster EventBroadcasterProducer
 
-	broadcasterOnce sync.Once
+	broadcasterOnce syncutil.Once
 	broadcaster     record.EventBroadcaster
 	stopBroadcaster bool
 }
@@ -135,7 +135,7 @@ type lazyRecorder struct {
 	prov *Provider
 	name string
 
-	recOnce sync.Once
+	recOnce syncutil.Once
 	rec     record.EventRecorder
 }
 

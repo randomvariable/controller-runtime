@@ -19,7 +19,7 @@ package config
 import (
 	"fmt"
 	ioutil "io/ioutil"
-	"sync"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -42,7 +42,7 @@ type DeferredFileLoader struct {
 	ControllerManagerConfiguration
 	path   string
 	scheme *runtime.Scheme
-	once   sync.Once
+	once   syncutil.Once
 	err    error
 }
 
@@ -62,7 +62,7 @@ func File() *DeferredFileLoader {
 	}
 }
 
-// Complete will use sync.Once to set the scheme.
+// Complete will use syncutil.Once to set the scheme.
 func (d *DeferredFileLoader) Complete() (v1alpha1.ControllerManagerConfigurationSpec, error) {
 	d.once.Do(d.loadFile)
 	if d.err != nil {

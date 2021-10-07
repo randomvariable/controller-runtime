@@ -17,7 +17,7 @@ limitations under the License.
 package log
 
 import (
-	"sync"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"github.com/go-logr/logr"
 )
@@ -40,7 +40,7 @@ type KubeAPIWarningLogger struct {
 	// opts contain options controlling warning output
 	opts KubeAPIWarningLoggerOptions
 	// writtenLock gurads written
-	writtenLock sync.Mutex
+	writtenLock syncutil.Mutex
 	// used to keep track of already logged messages
 	// and help in de-duplication.
 	written map[string]struct{}

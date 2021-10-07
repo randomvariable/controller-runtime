@@ -355,9 +355,6 @@ func New(config *rest.Config, options Options) (Manager, error) {
 		return nil, err
 	}
 
-	// By default we have no extra endpoints to expose on metrics http server.
-	metricsExtraHandlers := make(map[string]http.Handler)
-
 	// Create health probes listener. This will throw an error if the bind
 	// address is invalid or already in use.
 	healthProbeListener, err := options.newHealthProbeListener(options.HealthProbeBindAddress)
@@ -370,7 +367,6 @@ func New(config *rest.Config, options Options) (Manager, error) {
 		recorderProvider:              recorderProvider,
 		resourceLock:                  resourceLock,
 		metricsListener:               metricsListener,
-		metricsExtraHandlers:          metricsExtraHandlers,
 		controllerOptions:             options.Controller,
 		logger:                        options.Logger,
 		elected:                       make(chan struct{}),
@@ -387,6 +383,8 @@ func New(config *rest.Config, options Options) (Manager, error) {
 		gracefulShutdownTimeout:       *options.GracefulShutdownTimeout,
 		internalProceduresStop:        make(chan struct{}),
 		leaderElectionStopped:         make(chan struct{}),
+		cachesStarted:                 make(chan struct{}),
+		webhookServerStarted:          make(chan struct{}),
 		leaderElectionReleaseOnCancel: options.LeaderElectionReleaseOnCancel,
 	}, nil
 }

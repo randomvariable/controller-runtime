@@ -108,7 +108,7 @@ func (wh *Webhook) Handle(ctx context.Context, req Request) Response {
 // InjectFunc injects the field setter into the webhook.
 func (wh *Webhook) InjectFunc(f inject.Func) error {
 	// inject directly into the handlers.  It would be more correct
-	// to do this in a sync.Once in Handle (since we don't have some
+	// to do this in a syncutil.Once in Handle (since we don't have some
 	// other start/finalize-type method), but it's more efficient to
 	// do it here, presumably.
 

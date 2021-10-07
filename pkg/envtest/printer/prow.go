@@ -20,7 +20,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/config"
@@ -32,7 +33,7 @@ import (
 
 var (
 	allRegisteredSuites     = sets.String{}
-	allRegisteredSuitesLock = &sync.Mutex{}
+	allRegisteredSuitesLock = &syncutil.Mutex{}
 )
 
 type prowReporter struct {

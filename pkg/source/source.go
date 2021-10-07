@@ -20,8 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -197,7 +198,7 @@ var _ Source = &Channel{}
 // source (eh.g. http handler) to write GenericEvents to the underlying channel.
 type Channel struct {
 	// once ensures the event distribution goroutine will be performed only once
-	once sync.Once
+	once syncutil.Once
 
 	// Source is the source channel to fetch GenericEvents
 	Source <-chan event.GenericEvent
@@ -213,7 +214,7 @@ type Channel struct {
 	DestBufferSize int
 
 	// destLock is to ensure the destination channels are safely added/removed
-	destLock sync.Mutex
+	destLock syncutil.Mutex
 }
 
 func (cs *Channel) String() string {

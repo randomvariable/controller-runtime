@@ -27,13 +27,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/internal/metrics"
 )
@@ -87,14 +87,14 @@ type Server struct {
 	setFields inject.Func
 
 	// defaultingOnce ensures that the default fields are only ever set once.
-	defaultingOnce sync.Once
+	defaultingOnce syncutil.Once
 
 	// started is set to true immediately before the server is started
 	// and thus can be used to check if the server has been started
 	started bool
 
 	// mu protects access to the webhook map & setFields for Start, Register, etc
-	mu sync.Mutex
+	mu syncutil.Mutex
 }
 
 // setDefaults does defaulting for the Server.

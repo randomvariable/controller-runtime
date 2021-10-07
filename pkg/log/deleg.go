@@ -17,7 +17,7 @@ limitations under the License.
 package log
 
 import (
-	"sync"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"github.com/go-logr/logr"
 )
@@ -27,7 +27,7 @@ import (
 type loggerPromise struct {
 	logger        *DelegatingLogger
 	childPromises []*loggerPromise
-	promisesLock  sync.Mutex
+	promisesLock  syncutil.Mutex
 
 	name  *string
 	tags  []interface{}
@@ -38,7 +38,7 @@ func (p *loggerPromise) WithName(l *DelegatingLogger, name string) *loggerPromis
 	res := &loggerPromise{
 		logger:       l,
 		name:         &name,
-		promisesLock: sync.Mutex{},
+		promisesLock: syncutil.Mutex{},
 	}
 
 	p.promisesLock.Lock()
@@ -52,7 +52,7 @@ func (p *loggerPromise) WithValues(l *DelegatingLogger, tags ...interface{}) *lo
 	res := &loggerPromise{
 		logger:       l,
 		tags:         tags,
-		promisesLock: sync.Mutex{},
+		promisesLock: syncutil.Mutex{},
 	}
 
 	p.promisesLock.Lock()
@@ -65,7 +65,7 @@ func (p *loggerPromise) V(l *DelegatingLogger, level int) *loggerPromise {
 	res := &loggerPromise{
 		logger:       l,
 		level:        level,
-		promisesLock: sync.Mutex{},
+		promisesLock: syncutil.Mutex{},
 	}
 
 	p.promisesLock.Lock()
@@ -104,7 +104,7 @@ func (p *loggerPromise) Fulfill(parentLogger logr.Logger) {
 // logger.  It expects to have *some* logr.Logger set at all times (generally
 // a no-op logger before the promises are fulfilled).
 type DelegatingLogger struct {
-	lock    sync.RWMutex
+	lock    syncutil.RWMutex
 	logger  logr.Logger
 	promise *loggerPromise
 }
@@ -209,7 +209,7 @@ func (l *DelegatingLogger) Fulfill(actual logr.Logger) {
 func NewDelegatingLogger(initial logr.Logger) *DelegatingLogger {
 	l := &DelegatingLogger{
 		logger:  initial,
-		promise: &loggerPromise{promisesLock: sync.Mutex{}},
+		promise: &loggerPromise{promisesLock: syncutil.Mutex{}},
 	}
 	l.promise.logger = l
 	return l

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sync"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -57,7 +57,7 @@ var _ = Describe("runtime signal", func() {
 })
 
 type Task struct {
-	wg     sync.WaitGroup
+	wg     syncutil.WaitGroup
 	ticker *time.Ticker
 }
 

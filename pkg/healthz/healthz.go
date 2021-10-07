@@ -24,15 +24,23 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 )
 
 // Handler is an http.Handler that aggregates the results of the given
 // checkers to the root path, and supports calling individual checkers on
 // subpaths of the name of the checker.
 //
-// Adding checks on the fly is *not* threadsafe -- use a wrapper.
+// Use AddCheck to add checks, modifying Checks map is not threadsafe.
 type Handler struct {
 	Checks map[string]Checker
+	mu syncutil.Mutex
+}
+
+func (h *Handler) AddCheck(name string, check Checker) {
+	h.mu.Lock()
+	h.Checks[name] = check
+	h.mu.Unlock()
 }
 
 // checkStatus holds the output of a particular check.

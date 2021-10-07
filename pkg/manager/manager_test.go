@@ -24,9 +24,10 @@ import (
 	"net"
 	"net/http"
 	"path"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncutil"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo"
@@ -589,7 +590,7 @@ var _ = Describe("manger.Manager", func() {
 				for _, cb := range callbacks {
 					cb(m)
 				}
-				var wgRunnableStarted sync.WaitGroup
+				var wgRunnableStarted syncutil.WaitGroup
 				wgRunnableStarted.Add(2)
 				Expect(m.Add(RunnableFunc(func(context.Context) error {
 					defer GinkgoRecover()
@@ -772,14 +773,14 @@ var _ = Describe("manger.Manager", func() {
 					cb(m)
 				}
 
-				var lock sync.Mutex
+				var lock syncutil.Mutex
 				var runnableDoneCount int64
 				runnableDoneFunc := func() {
 					lock.Lock()
 					defer lock.Unlock()
 					atomic.AddInt64(&runnableDoneCount, 1)
 				}
-				var wgRunnableRunning sync.WaitGroup
+				var wgRunnableRunning syncutil.WaitGroup
 				wgRunnableRunning.Add(2)
 				Expect(m.Add(RunnableFunc(func(ctx context.Context) error {
 					wgRunnableRunning.Done()
@@ -801,7 +802,7 @@ var _ = Describe("manger.Manager", func() {
 				defer GinkgoRecover()
 				ctx, cancel := context.WithCancel(context.Background())
 
-				var wgManagerRunning sync.WaitGroup
+				var wgManagerRunning syncutil.WaitGroup
 				wgManagerRunning.Add(1)
 				go func() {
 					defer GinkgoRecover()
@@ -824,7 +825,7 @@ var _ = Describe("manger.Manager", func() {
 					cb(m)
 				}
 				defer GinkgoRecover()
-				var lock sync.Mutex
+				var lock syncutil.Mutex
 				runnableDoneCount := 0
 				runnableDoneFunc := func() {
 					lock.Lock()
@@ -859,7 +860,7 @@ var _ = Describe("manger.Manager", func() {
 				}
 				defer GinkgoRecover()
 
-				var wgRunnableRunning sync.WaitGroup
+				var wgRunnableRunning syncutil.WaitGroup
 				wgRunnableRunning.Add(1)
 				Expect(m.Add(RunnableFunc(func(ctx context.Context) error {
 					wgRunnableRunning.Done()
@@ -1728,7 +1729,7 @@ type startSignalingInformer struct {
 	// The manager calls Start and WaitForCacheSync in
 	// parallel, so we have to protect wasStarted with a Mutex
 	// and block in WaitForCacheSync until it is true.
-	wasStartedLock sync.Mutex
+	wasStartedLock syncutil.Mutex
 	wasStarted     bool
 	// was synced will be true once Start was called and
 	// WaitForCacheSync returned, just like a real cache.
