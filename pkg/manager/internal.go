@@ -22,8 +22,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sync"
 	"time"
+
+	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -60,17 +61,28 @@ const (
 
 var _ Runnable = &controllerManager{}
 
+type runnables struct {
+	r []Runnable
+	mu sync.Mutex
+}
+
+func (r runnables) Add(ru Runnable) {
+	r.mu.Lock()
+	r.r = append(r.r, ru)
+	r.mu.Unlock()
+}
+
 type controllerManager struct {
 	// cluster holds a variety of methods to interact with a cluster. Required.
 	cluster cluster.Cluster
 
 	// leaderElectionRunnables is the set of Controllers that the controllerManager injects deps into and Starts.
 	// These Runnables are managed by lead election.
-	leaderElectionRunnables []Runnable
+	leaderElectionRunnables runnables
 
 	// nonLeaderElectionRunnables is the set of webhook servers that the controllerManager injects deps into and Starts.
 	// These Runnables will not be blocked by lead election.
-	nonLeaderElectionRunnables []Runnable
+	nonLeaderElectionRunnables runnables
 
 	// recorderProvider is used to generate event recorders that will be injected into Controllers
 	// (and EventHandlers, Sources and Predicates).
@@ -87,7 +99,8 @@ type controllerManager struct {
 	metricsListener net.Listener
 
 	// metricsExtraHandlers contains extra handlers to register on http server that serves metrics.
-	metricsExtraHandlers map[string]http.Handler
+	//metricsExtraHandlers map[string]http.Handler
+	metricsExtraHandlers sync.Map
 
 	// healthProbeListener is used to serve liveness probe
 	healthProbeListener net.Listener
@@ -106,6 +119,7 @@ type controllerManager struct {
 
 	mu             sync.Mutex
 	started        bool
+	cachesStarted  chan struct{}
 	startedLeader  bool
 	healthzStarted bool
 	errChan        chan error
@@ -134,7 +148,8 @@ type controllerManager struct {
 	// election was configured.
 	elected chan struct{}
 
-	caches []hasCache
+	// caches is a goroutine safe container for adding/reading a slice of caches
+	caches caches
 
 	// port is the port that the webhook server serves at.
 	port int
@@ -149,6 +164,10 @@ type controllerManager struct {
 	// webhookServerOnce will be called in GetWebhookServer() to optionally initialize
 	// webhookServer if unset, and Add() it to controllerManager.
 	webhookServerOnce sync.Once
+
+	// webhookServerStarted can be used as a notification for when webhooks
+	// have started. In particular, webhooks must start before cache synchronisation.
+	webhookServerStarted chan struct{}
 
 	// leaseDuration is the duration that non-leader candidates will
 	// wait to force acquire leadership.
@@ -185,6 +204,17 @@ type controllerManager struct {
 	internalProceduresStop chan struct{}
 }
 
+type caches struct {
+	entries []hasCache
+	mu      sync.RWMutex
+}
+
+func (c *caches) Add(entry hasCache) {
+	c.mu.Lock()
+	c.entries = append(c.entries, entry)
+	c.mu.Unlock()
+}
+
 type hasCache interface {
 	Runnable
 	GetCache() cache.Cache
@@ -192,8 +222,6 @@ type hasCache interface {
 
 // Add sets dependencies on i, and adds it to the list of Runnables to start.
 func (cm *controllerManager) Add(r Runnable) error {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
 	if cm.stopProcedureEngaged {
 		return errors.New("can't accept new runnable as stop procedure is already engaged")
 	}
@@ -208,12 +236,12 @@ func (cm *controllerManager) Add(r Runnable) error {
 	// Add the runnable to the leader election or the non-leaderelection list
 	if leRunnable, ok := r.(LeaderElectionRunnable); ok && !leRunnable.NeedLeaderElection() {
 		shouldStart = cm.started
-		cm.nonLeaderElectionRunnables = append(cm.nonLeaderElectionRunnables, r)
+		cm.nonLeaderElectionRunnables.Add(r)
 	} else if hasCache, ok := r.(hasCache); ok {
-		cm.caches = append(cm.caches, hasCache)
+		cm.caches.Add(hasCache)
 	} else {
 		shouldStart = cm.startedLeader
-		cm.leaderElectionRunnables = append(cm.leaderElectionRunnables, r)
+		cm.leaderElectionRunnables.Add(r)
 	}
 
 	if shouldStart {
@@ -248,23 +276,17 @@ func (cm *controllerManager) AddMetricsExtraHandler(path string, handler http.Ha
 		return fmt.Errorf("overriding builtin %s endpoint is not allowed", defaultMetricsEndpoint)
 	}
 
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	if _, found := cm.metricsExtraHandlers[path]; found {
+	if _, found := cm.metricsExtraHandlers.Load(path); found {
 		return fmt.Errorf("can't register extra handler by duplicate path %q on metrics http server", path)
 	}
 
-	cm.metricsExtraHandlers[path] = handler
+	cm.metricsExtraHandlers.Store(path, handler)
 	cm.logger.V(2).Info("Registering metrics http server extra handler", "path", path)
 	return nil
 }
 
 // AddHealthzCheck allows you to add Healthz checker.
 func (cm *controllerManager) AddHealthzCheck(name string, check healthz.Checker) error {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
 	if cm.stopProcedureEngaged {
 		return errors.New("can't accept new healthCheck as stop procedure is already engaged")
 	}
@@ -273,19 +295,18 @@ func (cm *controllerManager) AddHealthzCheck(name string, check healthz.Checker)
 		return fmt.Errorf("unable to add new checker because healthz endpoint has already been created")
 	}
 
+	cm.mu.Lock()
 	if cm.healthzHandler == nil {
 		cm.healthzHandler = &healthz.Handler{Checks: map[string]healthz.Checker{}}
 	}
+	cm.mu.Unlock()
 
-	cm.healthzHandler.Checks[name] = check
+	cm.healthzHandler.AddCheck(name, check)
 	return nil
 }
 
 // AddReadyzCheck allows you to add Readyz checker.
 func (cm *controllerManager) AddReadyzCheck(name string, check healthz.Checker) error {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
 	if cm.stopProcedureEngaged {
 		return errors.New("can't accept new ready check as stop procedure is already engaged")
 	}
@@ -294,11 +315,13 @@ func (cm *controllerManager) AddReadyzCheck(name string, check healthz.Checker) 
 		return fmt.Errorf("unable to add new checker because readyz endpoint has already been created")
 	}
 
+	cm.mu.Lock()
 	if cm.readyzHandler == nil {
 		cm.readyzHandler = &healthz.Handler{Checks: map[string]healthz.Checker{}}
 	}
+	cm.mu.Unlock()
 
-	cm.readyzHandler.Checks[name] = check
+	cm.readyzHandler.AddCheck(name, check)
 	return nil
 }
 
@@ -367,12 +390,11 @@ func (cm *controllerManager) serveMetrics() {
 	mux.Handle(defaultMetricsEndpoint, handler)
 
 	func() {
-		cm.mu.Lock()
-		defer cm.mu.Unlock()
+		cm.metricsExtraHandlers.Range(func(path, extraHandler interface{}) bool {
+			mux.Handle(path.(string), extraHandler.(http.Handler))
+			return true
+		})
 
-		for path, extraHandler := range cm.metricsExtraHandlers {
-			mux.Handle(path, extraHandler)
-		}
 	}()
 
 	server := http.Server{
@@ -401,9 +423,6 @@ func (cm *controllerManager) serveHealthProbes() {
 	}
 
 	func() {
-		cm.mu.Lock()
-		defer cm.mu.Unlock()
-
 		if cm.readyzHandler != nil {
 			mux.Handle(cm.readinessEndpointName, http.StripPrefix(cm.readinessEndpointName, cm.readyzHandler))
 			// Append '/' suffix to handle subpaths
@@ -422,7 +441,9 @@ func (cm *controllerManager) serveHealthProbes() {
 			}
 			return nil
 		}))
+		cm.mu.Lock()
 		cm.healthzStarted = true
+		cm.mu.Unlock()
 	}()
 
 	// Shutdown the server when stop is closed
@@ -477,6 +498,7 @@ func (cm *controllerManager) Start(ctx context.Context) (err error) {
 	}
 
 	go cm.startNonLeaderElectionRunnables()
+	go cm.startCaches(cm.internalCtx)
 
 	go func() {
 		if cm.resourceLock != nil {
@@ -536,8 +558,8 @@ func (cm *controllerManager) engageStopProcedure(stopComplete <-chan struct{}) e
 		return nil
 	}
 	cm.mu.Lock()
-	defer cm.mu.Unlock()
 	cm.stopProcedureEngaged = true
+	cm.mu.Unlock()
 
 	// we want to close this after the other runnables stop, because we don't
 	// want things like leader election to try and emit events on a closed
@@ -574,26 +596,32 @@ func (cm *controllerManager) waitForRunnableToEnd(shutdownCancel context.CancelF
 }
 
 func (cm *controllerManager) startNonLeaderElectionRunnables() {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
 	// First start any webhook servers, which includes conversion, validation, and defaulting
 	// webhooks that are registered.
 	//
 	// WARNING: Webhooks MUST start before any cache is populated, otherwise there is a race condition
 	// between conversion webhooks and the cache sync (usually initial list) which causes the webhooks
 	// to never start because no cache can be populated.
-	for _, c := range cm.nonLeaderElectionRunnables {
+	var webhookserverStarted bool
+	for _, c := range cm.nonLeaderElectionRunnables.r {
 		if _, ok := c.(*webhook.Server); ok {
 			cm.startRunnable(c)
+			webhookserverStarted = true
+		}
+		if webhookserverStarted {
+			close(cm.webhookServerStarted)
 		}
 	}
+	// if no webhooks were started assume there were none and notify anyway
+	if !webhookserverStarted {
+		close(cm.webhookServerStarted)
+	}
 
-	// Start and wait for caches.
-	cm.waitForCache(cm.internalCtx)
+	// Wait for caches.
+	<-cm.cachesStarted
 
 	// Start the non-leaderelection Runnables after the cache has synced
-	for _, c := range cm.nonLeaderElectionRunnables {
+	for _, c := range cm.nonLeaderElectionRunnables.r {
 		if _, ok := c.(*webhook.Server); ok {
 			continue
 		}
@@ -605,40 +633,45 @@ func (cm *controllerManager) startNonLeaderElectionRunnables() {
 }
 
 func (cm *controllerManager) startLeaderElectionRunnables() {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	cm.waitForCache(cm.internalCtx)
+	<-cm.cachesStarted
 
 	// Start the leader election Runnables after the cache has synced
-	for _, c := range cm.leaderElectionRunnables {
+	for _, c := range cm.leaderElectionRunnables.r {
 		// Controllers block, but we want to return an error if any have an error starting.
 		// Write any Start errors to a channel so we can return them
 		cm.startRunnable(c)
 	}
 
+	cm.mu.Lock()
 	cm.startedLeader = true
+	cm.mu.Unlock()
 }
 
-func (cm *controllerManager) waitForCache(ctx context.Context) {
+func (cm *controllerManager) startCaches(ctx context.Context) {
 	if cm.started {
 		return
 	}
 
-	for _, cache := range cm.caches {
+	// Do not start cache sync before webhooks have a chance to start
+	<-cm.webhookServerStarted
+
+	for _, cache := range cm.caches.entries {
 		cm.startRunnable(cache)
 	}
 
 	// Wait for the caches to sync.
 	// TODO(community): Check the return value and write a test
-	for _, cache := range cm.caches {
+	for _, cache := range cm.caches.entries {
 		cache.GetCache().WaitForCacheSync(ctx)
 	}
 	// TODO: This should be the return value of cm.cache.WaitForCacheSync but we abuse
 	// cm.started as check if we already started the cache so it must always become true.
 	// Making sure that the cache doesn't get started twice is needed to not get a "close
 	// of closed channel" panic
+	cm.mu.Lock()
 	cm.started = true
+	cm.mu.Unlock()
+	close(cm.cachesStarted)
 }
 
 func (cm *controllerManager) startLeaderElection() (err error) {
